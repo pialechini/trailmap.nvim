@@ -76,7 +76,7 @@ Defaults:
 ```lua
 require("trailmap").setup({
   agent = "claude", -- "claude" | "codex"
-  width = 0.4, -- agent terminal width, as a fraction of the editor
+  width = 0.12, -- agent terminal width: fraction of the editor (< 1) or columns (>= 1)
   agents = {
     claude = { cmd = "claude", model = "sonnet" },
     codex = { cmd = "codex", model = nil }, -- nil: model from ~/.codex/config.toml

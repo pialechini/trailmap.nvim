@@ -40,6 +40,9 @@ end
 vim.api.nvim_set_hl(0, "TrailmapRange", { default = true, link = "DiffChange" })
 vim.api.nvim_set_hl(0, "TrailmapSign", { default = true, link = "DiffAdd" })
 vim.api.nvim_set_hl(0, "TrailmapGuide", { default = true, link = "NonText" })
+vim.api.nvim_set_hl(0, "TrailmapLoc", { default = true, link = "DiagnosticWarn" })
+vim.api.nvim_set_hl(0, "TrailmapRangeCount", { default = true, link = "Comment" })
+vim.api.nvim_set_hl(0, "TrailmapFold", { default = true, link = "NonText" })
 
 local function icon(file)
   local ok, mi = pcall(require, "mini.icons")
@@ -53,6 +56,23 @@ local function icon(file)
     return i, hl
   end
   return "", "Normal"
+end
+
+local function dir_icon(open_)
+  return open_ and "\u{f115}" or "\u{f114}", "Directory"
+end
+
+--- Number of distinct lines covered by a file's ranges.
+local function loc(ranges)
+  local seen, n = {}, 0
+  for _, r in ipairs(ranges) do
+    for l = r[1], r[2] do
+      if not seen[l] then
+        seen[l], n = true, n + 1
+      end
+    end
+  end
+  return n
 end
 
 --- Group snippets by file (first-seen order kept for ranking, tree sorted by path).
@@ -174,40 +194,45 @@ local function open(main, question, snippets, quit)
       if meta.file then rowfile[#lines] = meta.file end
       if meta.dir then rowdir[#lines] = meta.dir end
     end
-    local function walk(node, prefix)
+    -- Diffview-style rows: "<loc> <guides><fold> <icon> name". The left gutter holds
+    -- the number of lines this question touches in the file (where diffview puts M/?/D).
+    local gw = 1
+    for _, f in ipairs(files) do
+      gw = math.max(gw, #tostring(loc(by[f])))
+    end
+    local blank = string.rep(" ", gw + 1)
+    local function walk(node, guides)
       local dirs = vim.tbl_values(node.dirs)
       table.sort(dirs, function(x, y) return x.name < y.name end)
       local fs = vim.deepcopy(node.files)
       table.sort(fs)
-      local total = #dirs + #fs
-      local i = 0
       for _, d in ipairs(dirs) do
-        i = i + 1
-        local last = i == total
         local open_ = not collapsed[d.path]
+        local di, dhl = dir_icon(open_)
         add({
-          { prefix .. (last and "└ " or "├ "), "TrailmapGuide" },
-          { open_ and " " or " ", "Directory" },
+          { blank, nil },
+          { guides, "TrailmapGuide" },
+          { open_ and "\u{f47c} " or "\u{f460} ", "TrailmapFold" },
+          { di .. " ", dhl },
           { d.name, "Directory" },
         }, { dir = d.path })
         if open_ then
-          walk(d, prefix .. (last and "  " or "│ "))
+          walk(d, guides .. "│ ")
         end
       end
       for _, f in ipairs(fs) do
-        i = i + 1
-        local last = i == total
         local name = f:match("[^/]+$")
         local ic, ichl = icon(name)
         add({
-          { prefix .. (last and "└ " or "├ "), "TrailmapGuide" },
+          { string.format("%" .. gw .. "d ", loc(by[f])), "TrailmapLoc" },
+          { guides .. "  ", "TrailmapGuide" },
           { ic .. " ", ichl },
           { name, nil },
-          { "  " .. #by[f], "Number" },
+          { " " .. #by[f], "TrailmapRangeCount" },
         }, { file = f })
       end
     end
-    walk(root, " ")
+    walk(root, "")
     vim.bo[pbuf].modifiable = true
     vim.api.nvim_buf_set_lines(pbuf, 0, -1, false, lines)
     vim.bo[pbuf].modifiable = false
@@ -222,7 +247,7 @@ local function open(main, question, snippets, quit)
   end
   render()
 
-  local panel = vim.api.nvim_open_win(pbuf, false, { split = "left", win = main, width = 40 })
+  local panel = vim.api.nvim_open_win(pbuf, false, { split = "left", win = main, width = 36 })
   for opt, v in pairs({ number = false, relativenumber = false, signcolumn = "no", wrap = false, cursorline = true, winfixwidth = true, statuscolumn = "" }) do
     vim.wo[panel][opt] = v
   end
@@ -363,7 +388,7 @@ end
 
 M.config = {
   agent = "claude", -- "claude" | "codex"
-  width = 0.4, -- agent terminal width, fraction of the editor
+  width = 0.12, -- agent terminal width: fraction of the editor (< 1) or columns (>= 1)
   agents = {
     claude = { cmd = "claude", model = "sonnet" },
     codex = { cmd = "codex", model = nil }, -- nil: model from ~/.codex/config.toml
@@ -481,8 +506,9 @@ function M.ask(question)
   local term = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {
     split = "right",
     win = main,
-    width = math.floor(vim.o.columns * M.config.width),
+    width = M.config.width < 1 and math.floor(vim.o.columns * M.config.width) or M.config.width,
   })
+  vim.wo[term].winfixwidth = true
   local tbuf = vim.api.nvim_win_get_buf(term)
   local job = vim.fn.jobstart(agents[agent](prompt, result), { term = true, cwd = cwd })
   -- Leave the agent without the mouse: <C-h/j/k/l> move to the neighbouring window.
