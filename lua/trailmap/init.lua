@@ -43,6 +43,7 @@ vim.api.nvim_set_hl(0, "TrailmapGuide", { default = true, link = "NonText" })
 vim.api.nvim_set_hl(0, "TrailmapLoc", { default = true, link = "DiagnosticWarn" })
 vim.api.nvim_set_hl(0, "TrailmapRangeCount", { default = true, link = "Comment" })
 vim.api.nvim_set_hl(0, "TrailmapFold", { default = true, link = "NonText" })
+vim.api.nvim_set_hl(0, "TrailmapSelected", { default = true, link = "Type" })
 
 local function icon(file)
   local ok, mi = pcall(require, "mini.icons")
@@ -173,6 +174,7 @@ local function open(main, question, snippets, quit)
 
   local collapsed = {}
   local lines, rowfile, rowdir = {}, {}, {}
+  local current -- file shown in `main`, highlighted in the tree
 
   local pbuf = vim.api.nvim_create_buf(false, true)
   vim.bo[pbuf].bufhidden = "wipe"
@@ -194,14 +196,14 @@ local function open(main, question, snippets, quit)
       if meta.file then rowfile[#lines] = meta.file end
       if meta.dir then rowdir[#lines] = meta.dir end
     end
-    -- Diffview-style rows: "<loc> <guides><fold> <icon> name". The left gutter holds
+    -- Diffview-style rows: "<loc> <indent><fold> <icon> name". The left gutter holds
     -- the number of lines this question touches in the file (where diffview puts M/?/D).
     local gw = 1
     for _, f in ipairs(files) do
       gw = math.max(gw, #tostring(loc(by[f])))
     end
     local blank = string.rep(" ", gw + 1)
-    local function walk(node, guides)
+    local function walk(node, indent)
       local dirs = vim.tbl_values(node.dirs)
       table.sort(dirs, function(x, y) return x.name < y.name end)
       local fs = vim.deepcopy(node.files)
@@ -211,13 +213,13 @@ local function open(main, question, snippets, quit)
         local di, dhl = dir_icon(open_)
         add({
           { blank, nil },
-          { guides, "TrailmapGuide" },
+          { indent, nil },
           { open_ and "\u{f47c} " or "\u{f460} ", "TrailmapFold" },
           { di .. " ", dhl },
           { d.name, "Directory" },
         }, { dir = d.path })
         if open_ then
-          walk(d, guides .. "│ ")
+          walk(d, indent .. "  ")
         end
       end
       for _, f in ipairs(fs) do
@@ -225,9 +227,9 @@ local function open(main, question, snippets, quit)
         local ic, ichl = icon(name)
         add({
           { string.format("%" .. gw .. "d ", loc(by[f])), "TrailmapLoc" },
-          { guides .. "  ", "TrailmapGuide" },
+          { indent .. "  ", nil },
           { ic .. " ", ichl },
-          { name, nil },
+          { name, f == current and "TrailmapSelected" or nil },
           { " " .. #by[f], "TrailmapRangeCount" },
         }, { file = f })
       end
@@ -260,6 +262,10 @@ local function open(main, question, snippets, quit)
     vim.api.nvim_win_call(main, function()
       vim.cmd("edit " .. vim.fn.fnameescape(f))
     end)
+    if current ~= f then
+      current = f
+      render()
+    end
     local buf = vim.api.nvim_win_get_buf(main)
     mark_file(buf, by[f], touched, function(dir)
       if dir == 0 then
@@ -339,20 +345,43 @@ local function open(main, question, snippets, quit)
   end
   map("<CR>", function() activate(true) end, "Open file / toggle dir")
   map("o", function() activate(true) end, "Open file / toggle dir")
-  map("<2-LeftMouse>", function() activate(true) end, "Open file / toggle dir")
+  -- A double-click's first release already toggled a dir; only open files here.
+  map("<2-LeftMouse>", function()
+    if file_at_cursor() then activate(true) end
+  end, "Open file")
   map("<LeftRelease>", function() activate(false) end, "Preview file / toggle dir")
   map("p", function() activate(false) end, "Preview file")
-  map("l", function()
+  -- On a dir both h and l toggle it; on a file h collapses the parent, l previews.
+  map("l", function() activate(false) end, "Toggle dir / preview file")
+  map("h", function()
     local row = vim.api.nvim_win_get_cursor(panel)[1]
-    if rowdir[row] then set_collapsed(false) else activate(false) end
-  end, "Expand / preview")
-  map("h", function() set_collapsed(true) end, "Collapse")
+    if rowdir[row] then activate(false) else set_collapsed(true) end
+  end, "Toggle dir / collapse parent")
+  map("zo", function() set_collapsed(false) end, "Expand dir")
+  map("zc", function() set_collapsed(true) end, "Collapse dir")
+  map("za", function()
+    local row = vim.api.nvim_win_get_cursor(panel)[1]
+    if rowdir[row] then activate(false) else set_collapsed(true) end
+  end, "Toggle dir")
+  local function set_all(val)
+    local function each(node)
+      for _, d in pairs(node.dirs) do
+        collapsed[d.path] = val or nil
+        each(d)
+      end
+    end
+    each(root)
+    render()
+  end
+  map("zR", function() set_all(false) end, "Expand all")
+  map("zM", function() set_all(true) end, "Collapse all")
   map("<Tab>", function() step(1) end, "Next file")
   map("<S-Tab>", function() step(-1) end, "Prev file")
   -- Moving onto a file (j/k/mouse) previews it, like diffview.
   local last_preview
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = pbuf,
+    nested = true, -- let :edit fire BufRead/FileType (treesitter, LSP)
     callback = function()
       local f = rowfile[vim.api.nvim_win_get_cursor(panel)[1]]
       if f and f ~= last_preview then
