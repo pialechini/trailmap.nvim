@@ -1,26 +1,62 @@
-# trailmap.nvim
+# 🗺️ trailmap.nvim
 
-Ask a question about your codebase; an AI agent maps the code that answers it.
+**Ask your codebase a question. Get back the code that answers it.**
 
-`:Trailmap how does checkout create an order?` opens a new tab with an interactive
-[Claude Code](https://claude.com/claude-code) or [Codex](https://github.com/openai/codex)
-session on the right. The agent searches the repository (using
-[CodeGraph](https://github.com/colbymchenry/codegraph) when available), then hands
-back the exact line ranges that answer the question. trailmap.nvim renders them as a
-file tree on the left and highlights each range in the source, so you can walk the
-flow from trigger to API call. Keep chatting with the agent; when its answer changes,
-the map updates.
+You've been there. The project started small, you knew every file. Then it grew:
+new features, new teammates, a few rewrites, a `utils/` folder nobody wants to open.
+Now it's a black box. Somebody asks *"what actually happens when a user clicks
+Checkout?"* and you spend half an hour grepping, jumping to definitions, and keeping
+twelve buffers in your head.
 
-## Requirements
+What if you could just **ask**, and see the answer the way you already review code:
+as a diff-style file tree, with exactly the lines that matter highlighted?
+
+```vim
+:Trailmap how does checkout create an order?
+```
+
+![trailmap.nvim demo: asking a question about umami and walking the highlighted ranges](https://github.com/user-attachments/assets/2c927e66-9280-4a2c-831c-a14c7fcb24db)
+
+## ✨ What you get
+
+- **Answers, not search results.** An AI agent ([Claude Code](https://claude.com/claude-code)
+  or [Codex](https://github.com/openai/codex)) follows the flow end to end, from UI
+  trigger to hook to server action to API call, and hands back only the ranges that matter.
+- **A view you already know.** A [diffview](https://github.com/sindrets/diffview.nvim)-style
+  file tree on the left, your real source buffers in the middle. LSP, treesitter, and
+  your keymaps all keep working, because it *is* your code, not a copy.
+- **Every line explained.** Each range is highlighted, gets a sign, and carries a short
+  note on why it's there.
+- **A conversation, not one shot.** The agent runs in an interactive terminal on the
+  right. Ask *"and what about refunds?"* and the map redraws in place.
+- **Walk it like a story.** `<Tab>` to the next file, `]s` to the next range, `gq` to dump
+  the whole trail into quickfix.
+- **Faster with [CodeGraph](https://github.com/colbymchenry/codegraph).** When the repo is
+  indexed, the agent uses the symbol graph to find things in one hop. No index? It falls
+  back to plain file search.
+
+## 💡 Questions worth asking
+
+```vim
+:Trailmap where do we validate the JWT and what happens when it's expired?
+:Trailmap how does a new user get their default settings?
+:Trailmap what writes to the orders table?
+:Trailmap why does the dashboard fetch the profile twice?
+:Trailmap how is the websocket connection retried?
+```
+
+Great for onboarding onto a new repo, reviewing a feature you didn't write, planning a
+refactor, or remembering what past-you was thinking.
+
+## 📦 Requirements
 
 - Neovim 0.11+
 - [`claude`](https://claude.com/claude-code) and/or [`codex`](https://github.com/openai/codex) on `$PATH`
 - Optional: [`codegraph`](https://github.com/colbymchenry/codegraph) with the repository indexed
-  (the agent falls back to plain file search without it)
 - Optional: [mini.icons](https://github.com/echasnovski/mini.icons) or
   [nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) for file icons
 
-## Installation
+## 🚀 Installation
 
 [lazy.nvim](https://github.com/folke/lazy.nvim):
 
@@ -35,7 +71,9 @@ the map updates.
 }
 ```
 
-## Usage
+Then open a project and run `:Trailmap`. That's it.
+
+## ⌨️ Usage
 
 | Command | |
 | --- | --- |
@@ -48,12 +86,17 @@ the map updates.
 
 | Key | |
 | --- | --- |
+| `j` / `k` | Move; landing on a file previews it |
 | `<CR>` / `o` | Open file / toggle directory |
 | `p` | Preview file |
 | `l` / `h` | Expand / collapse |
+| `zo` / `zc` / `za` | Open / close / toggle directory |
+| `zR` / `zM` | Expand / collapse all |
 | `<Tab>` / `<S-Tab>` | Next / previous file |
 | `gq` | Send all ranges to the quickfix list |
 | `q` | Close |
+
+Mouse works too: click to preview, double-click to open.
 
 **Source window**
 
@@ -69,7 +112,7 @@ the map updates.
 | --- | --- |
 | `<C-h>` `<C-j>` `<C-k>` `<C-l>` | Move to the neighbouring window |
 
-## Configuration
+## ⚙️ Configuration
 
 Defaults:
 
@@ -84,20 +127,22 @@ require("trailmap").setup({
 })
 ```
 
-Highlight groups (all `default`, override freely): `TrailmapRange`, `TrailmapSign`, `TrailmapGuide`.
+Highlight groups (all `default`, override freely): `TrailmapRange`, `TrailmapSign`,
+`TrailmapGuide`, `TrailmapFold`, `TrailmapLoc`, `TrailmapRangeCount`, `TrailmapSelected`.
 
-## How it works
+## 🔍 How it works
 
-The agent is told to answer by writing JSON to a temporary file:
+trailmap.nvim is a thin viewer. The agent does all the searching and double-checks its
+own answer, then writes JSON to a temporary file:
 
 ```json
 { "summary": "...", "files": [{ "file": "src/a.ts", "ranges": [{ "start": 10, "end": 24, "why": "..." }] }] }
 ```
 
 trailmap.nvim watches that file, checks every range against the files on disk, and
-re-renders whenever the agent rewrites it.
+re-renders whenever the agent rewrites it. No servers, no indexing of its own, one Lua file.
 
-## Security
+## 🔒 Security
 
 The agent runs as you, in the current working directory.
 
