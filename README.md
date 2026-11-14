@@ -15,7 +15,7 @@ as a diff-style file tree, with exactly the lines that matter highlighted?
 :Trailmap how does checkout create an order?
 ```
 
-![trailmap.nvim demo: asking a question about umami and walking the highlighted ranges](https://github.com/user-attachments/assets/2c927e66-9280-4a2c-831c-a14c7fcb24db)
+![trailmap.nvim demo: asking a question about umami and walking the highlighted ranges](https://raw.githubusercontent.com/pialechini/trailmap.nvim/assets/demo.gif)
 
 ## ✨ What you get
 
