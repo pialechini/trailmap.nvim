@@ -12,7 +12,7 @@ What if you could just **ask**, and see the answer the way you already review co
 as a diff-style file tree, with exactly the lines that matter highlighted?
 
 ```vim
-:Trailmap how does checkout create an order?
+:Trailmap how does the app choose between Prisma, ClickHouse and Kafka when running a query?
 ```
 
 ![trailmap.nvim demo: asking a question about umami and walking the highlighted ranges](https://raw.githubusercontent.com/pialechini/trailmap.nvim/assets/demo.gif)
